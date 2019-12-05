@@ -26,3 +26,6 @@ R/confidenceConnected.R
 R/connectedThresholdImage.R
 ^doc$
 ^\.github$
+^DESCRIPTION\.bak$
+^\./\.travis\.yml\.bak$
+^\./appveyor\.yml\.bak$

@@ -1,166 +1,140 @@
-# ANTsR Build
 language: r
-sudo: required
-cache:
-  - timeout: 1000
-  - packages
-  - ccache
 warnings_are_errors: true
-bioc_required: false
+cache: packages
+use_bioc: true
+bioc_required: true
 cran: http://cran.rstudio.com
-dist: xenial
-
+dist: trusty
+addons:
+  apt:
+    packages:
+    - libcurl4-openssl-dev
+    - libxml2-dev
+    - libfftw3-dev
+    - libgsl0-dev
+    - libgsl0ldbl
+    - mesa-common-dev
+    - libglu1-mesa-dev
+    - devscripts
 os:
-  - linux
-  - osx
-
+- linux
+- osx
+osx_image: xcode9.4
 services:
-  - xvfb 
+- xvfb
 r:
-  - oldrel
-  - release
-  - devel
-
+- 3.3
+- 3.4
+- 3.5
+- release
+- devel
 matrix:
   allow_failures:
-    - r: devel
-    - os: osx
-
-compiler: clang
-osx_image: xcode9.4
-
-
+  - r: devel
 env:
   global:
-  - R_BUILD_ARGS=" --no-manual "
-  - R_CHECK_ARGS=" --timings --as-cran --no-manual --install-args=--build"
-  - R_CHECK_TIME="TRUE"
-  - R_CHECK_TESTS="TRUE"
-  - _R_CHECK_TIMINGS_="0"
-  - BOOTSTRAP_LATEX=1
-  - WARNINGS_ARE_ERRORS=1   
+  - R_BUILD_ARGS="--no-manual"
+  - R_CHECK_ARGS="--as-cran --install-args=--build"
+  - RGL_USE_NULL=TRUE
+  - WARNINGS_ARE_ERRORS=1
+  - PROJECT_NAME=neuroconductor-releases
   - DISPLAY=:99.0
+  - R_REMOTES_NO_ERRORS_FROM_WARNINGS=true
   - _R_CHECK_FORCE_SUGGESTS_=false
-
+  - CACHE_NAME="${TRAVIS_OS_NAME}-R-${TRAVIS_R_VERSION}"
 before_install:
-  - ulimit -n 2048
-  - export LD_LIBRARY_PATH=/usr/local/clang/lib:${LD_LIBRARY_PATH}
-  - export PROJ_DIR=`basename ${TRAVIS_BUILD_DIR}`
-  - export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=1
-  - fname=travis_helpers.sh
-  - wget -O ${fname} http://bit.ly/travis_helpers
-  - cat ${fname}; source ${fname}; rm ${fname}
-  - codename=`linux_codename`;
-  - if [ "${codename}" = "trusty" ];
-    then
-      start_xvfb ;
-    fi
-#  - start_xvfb ;
-#  - v8_install ;
-  - export rver=`r_version`;
-  - export gh_user=`get_gh_user` ; echo $gh_user ;    
-  - cat DESCRIPTION
-  - export PACKAGE_NAME=`package_name`
-  - echo ${PACKAGE_NAME};
-  - export RCHECK_DIR=${PACKAGE_NAME}.Rcheck
-  # does all the clang exports
-  - x=`export_clang_cxx`; eval ${x}
-  - if [ "$TRAVIS_OS_NAME" = "osx" ];
-    then
-      no_open_mp ;
-    fi
-  - echo "CC=${CC}, CXX=${CXX}, CXX1X=${CXX1X}"
-  - echo "CXX1XSTD=${CXX1XSTD}, CXX11=${CXX11}"
-  - clang_cxx
-  # - hdf5_install ;
-  - export cmake_version="3.14"
-  - cmake --version
-  - x=`cmake_setup`; echo "${x}"; eval ${x};
-  - cmake --version
-  - ./cleanup
-  - Rscript -e "install.packages(c('Rcpp', 'RcppEigen'), type = 'source', repos=c(CRAN='https://cran.rstudio.com'))"
-  - Rscript -e "install.packages( c('magrittr','testthat','knitr','rmarkdown','covr','devtools', 'desc',  'remotes', 'colormap' ), repos=c(CRAN='https://cran.rstudio.com'))"
-  - Rscript -e 'install.packages("rsvd")'
-  - Rscript -e 'install.packages("magic")'
-  - Rscript -e 'install.packages("ggplot2")'
-  - Rscript -e 'install.packages("psych")'
-  - Rscript -e 'install.packages("randomForest")'
-  - gh_binary_install stnava/ITKR ANTsX/ANTsRCore
-  # - gh_binary_install muschellij2/ITKR muschellij2/ANTsRCore
-  - export ants_user=ANTsX
-  - echo "Done Binary Installs"
-
-install:
-  - echo "skip this"
-
+- ulimit -n 2048
+- export LD_LIBRARY_PATH=/usr/local/clang/lib:${LD_LIBRARY_PATH}
+- export PROJ_DIR=`basename $PWD`
+- echo "travis_wait*\.log$" >> .Rbuildignore
+- fname=travis_helpers.sh
+- wget -O ${fname} http://bit.ly/travis_helpers
+- cat ${fname}; source ${fname}; rm ${fname}
+- cat DESCRIPTION
+- start_xvfb ;
+- jags_install || true;
+- if `need_v8`; then v8_install || true; fi
+- dcmtk_install || true;
+- gsl_install 2.1 || true ;
+- export rver=`r_version`; echo $rver ;
+- export PACKAGE_NAME=`package_name`
+- export RCHECK_DIR=${PACKAGE_NAME}.Rcheck
+- remove_neuroc_packages
+- export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=1
+- x=`export_clang_cxx`; eval ${x}
+- if [ "$TRAVIS_OS_NAME" = "osx" ]; then no_open_mp ; brew install -v freetype ; fi
+- echo "CC=${CC}, CXX=${CXX}, CXX1X=${CXX1X}"
+- echo "CXX1XSTD=${CXX1XSTD}, CXX11=${CXX11}"
+- clang_cxx
+- export cmake_version="3.11"
+- cmake --version
+- x=`cmake_setup`; echo "${x}"; eval ${x};
+- cmake --version
+- export ants_user=neuroconductor-releases
+- if [[ "${PACKAGE_NAME}" == "ITKR" || "${PACKAGE_NAME}" == "ANTsRCore" || "${PACKAGE_NAME}"
+  == "ANTsR" ]]; then Rscript -e "install.packages(c('Rcpp', 'RcppEigen'), type =
+  'source', repo = 'http://cran.rstudio.com')" ; fi
+- if [[ "${PACKAGE_NAME}" == "ITKR" || "${PACKAGE_NAME}" == "ANTsRCore" ]]; then export
+  R_BUILD_ARGS="${R_BUILD_ARGS} --no-build-vignettes " ; export R_CHECK_ARGS="--no-vignettes
+  ${R_CHECK_ARGS}" ; fi
+- if [[ "${PACKAGE_NAME}" != "ITKR" ]]; then echo "Installing Missing Deps ITKR" ;
+  install_missing_remote_deps_all ${ants_user}/ITKR ; gh_binary_install ${ants_user}/ITKR
+  ; fi
+- if [[ "${PACKAGE_NAME}" != "ANTsRCore" && "${PACKAGE_NAME}" != "ITKR" ]]; then echo
+  "Installing Missing Deps ANTsRCore" ; install_missing_remote_deps_all ${ants_user}/ANTsRCore;
+  gh_binary_install_passive ${ants_user}/ANTsRCore ; fi
+- if [[ "${PACKAGE_NAME}" != "ANTsRCore" && "${PACKAGE_NAME}" != "ITKR" && "${PACKAGE_NAME}"
+  != "ANTsR" ]]; then echo "Installing Missing Deps ANTsR" ; install_missing_remote_deps_all
+  ${ants_user}/ANTsR ; gh_binary_install_passive ${ants_user}/ANTsR ; fi
+- if [[ "${PACKAGE_NAME}" == "ANTsR" ]]; then export _R_CHECK_FORCE_SUGGESTS_=false
+  ; fi
+- cat DESCRIPTION
+- install_remotes_no_dep
+- cat DESCRIPTION
+- echo $PATH ;
+- install_deps_no_suggests
+- install_python_requirements ;
+- R CMD javareconf ;
+- travis_run_cache
 script:
-  - x=`export_clang_cxx`; eval ${x}
-  - travis_wait 100 R CMD build ${R_BUILD_ARGS} .
-  - rm -f travis_wait*.log
-  - PKG_TARBALL=$(ls -1t *.tar.gz | head -n 1)
-  - ls
-  - travis_wait 100 R CMD check ${R_CHECK_ARGS} "${PKG_TARBALL}"; CHECK_RET=$? ;
-  - rm -f travis_wait*.log
-  - if [[ $CHECK_RET -ne 0 ]];
-    then
-      echo "R CMD check failed";
-      check_fail;
-      dump_logs;
-      travis_terminate 1;
-    fi
-  - check_warnings
-
-
-after_failure:
-  - dump_logs
-
+- x=`export_clang_cxx`; eval ${x}
+- travis_wait 100 R CMD build ${R_BUILD_ARGS} .
+- rm -f travis_wait*.log
+- PKG_TARBALL=$(ls -1t *.tar.gz | head -n 1)
+- ls
+- travis_wait 100 R CMD check ${R_CHECK_ARGS} "${PKG_TARBALL}"; CHECK_RET=$? ;
+- rm -f travis_wait*.log
+- if [[ $CHECK_RET -ne 0 ]]; then echo "R CMD check failed"; check_fail; dump_logs;
+  travis_terminate 1; fi
+- check_warnings
 after_success:
-  - dump_logs
-  - ls
-  - PKG_FILE_NAME=$(ls -1t *.tar.gz | head -n 1);
-  - PKG_TARBALL_WITH_R=`echo $PKG_FILE_NAME | sed 's/.tar.gz/_'"R${rver}"'.tar.gz/'` ;
-  - if [ "$TRAVIS_OS_NAME" == "osx" ]; then
-      PKG_FILE_NAME=$(ls -1t *.tgz | head -n  1);
-      PKG_TARBALL_WITH_R=`echo $PKG_FILE_NAME | sed 's/.tgz/_'"R${rver}"'.tgz/'` ;
-    fi
-  - mv ${PKG_FILE_NAME} ${PKG_TARBALL_WITH_R} ;
-  - PKG_FILE_NAME=${PKG_TARBALL_WITH_R}
-
-notifications:
-  email:
-    recipients:
-    - muschellij2@gmail.com
-    - stnava@gmail.com
-    - arman.eshaghi@gmail.com
-    - jeff.duda@gmail.com
-    on_success: change
-    on_failure: always
-
-# so no overwrite of linux build
+- dump_logs
+after_failure:
+- dump_logs
 before_deploy:
-  - if [ "$TRAVIS_OS_NAME" = "osx" ];
-    then
-      rm -f *.tar.gz;
-    fi
-
+- if [ "$TRAVIS_OS_NAME" = "osx" ]; then PKG_TARBALL=$(ls -1t *.tgz | head -n 1);
+  PKG_TARBALL_WITH_R=`echo $PKG_TARBALL | sed 's/.tgz/_'"R${rver}"'.tgz/'` ; mv ${PKG_TARBALL}
+  ${PKG_TARBALL_WITH_R} ; echo "Built tarball is ${PKG_TARBALL_WITH_R}" ; fi
+- if [ "$TRAVIS_OS_NAME" = "linux" ]; then PKG_TARBALL=$(ls -1t *.tar.gz | head -n
+  1); PKG_TARBALL_WITH_R=`echo $PKG_TARBALL | sed 's/.tar.gz/_'"R${rver}"'.tar.gz/'`
+  ; mv ${PKG_TARBALL} ${PKG_TARBALL_WITH_R} ; echo "Built tarball is ${PKG_TARBALL_WITH_R}"
+  ; fi
+- if [ "$TRAVIS_OS_NAME" = "osx" ]; then rm -f *.tar.gz; fi
 deploy:
-  - provider: releases
-    api_key:
-      secure: VevZHK5WDwd2mFSrF3+b2jTRzImb6juOgewcOvZ8LJ2S70khn64Kx4+JGUvk5miKWVbKnHIhPxOJY50muO9sT15ApP+HFZYpiVpx4l/hEypk9zmJD+f+ERuN7j8elCzUZqet3v77XD+pBcYMxFARew4gGDkG2LO5casij0YNiyQ=
-    file: ${PKG_FILE_NAME}
-    skip_cleanup: true
-    on:
-      tags: true
-      repo: ${gh_user}/${PROJ_DIR}
-      all_branches: true
-      condition: "${gh_user} = ANTsX"
-  - provider: releases
-    api_key:
-      secure: r7FsUfP8EozlZBDTIHzAE5ENqyeuopoWxxpKoAxkhGkDwB6rLDkNhjmFk3SZxP/8Sx51CeO1oFDUC/G5QWpfYdSYRIkq0GoubhGTDdOk3S1F6z4ncsi6DO24MkxxZbAb4e7lyK1bBaVla/SKm0QQivzqNn5g+jNLAjek4Yc2hBCUdtbyYk++fuGKsBVSC/VeahE9I6SsHQAZMViOAVgR6Y80cxeIzsVk6yFljOmc/EQxCVG8M1Rq/VZYnkZfLB5E35bbCehcdwHWjPvsP1TfbBDFo4DsyHhmIe1L6k7AtuFOrBl9zK0rBAMJznwHsI0D4SsNAwdFYrqK/tSMB7pTxDR90KfkQpFjt2JxBdz5msFVZAQqcuvbbNlrbnf0m5wtX2DPB6wuPwdRxmCMrXyT5EZE4bbYmKhF4l3DDX0snncZvusSwrHD+r90kriwgZm7ogWSRFATOLRXtEVrWGyQYCjZoAFM9vB8lL+/8yQbB80e3gYexyYI+AFzgmiNTPc+6TYF8UUKMUiBsdN5iqbdYYrmuTexKDC0So23XuBO3vlRLQLhjmtFwY/FNywneOpEfwVZfxIMeleuF0T7z0XDgPpFQ4PmXtpXqKQiAxI18dplxfG8vsyACeLnVfslF8H2/bWdRgMukDUlLyKFBLVHUFoSyo8zPAcBM+7P+mS9SbQ=
-    file: ${PKG_FILE_NAME}
-    skip_cleanup: true
-    on:
-      repo: muschellij2/ANTsR
-      all_branches: true
-      condition: "${gh_user} = muschellij2"
+  provider: releases
+  skip_cleanup: true
+  file_glob: true
+  overwrite: true
+  file: "${PACKAGE_NAME}*.t*gz"
+  on:
+    tags: true
+  api-key:
+    secure: o4ZBlVTYTYZer95Cq+71RL7SL0+8yytw6iiofyaobyYj2uTUSB/3hm9Uca5+icjmSAsxTrJod474bVAeN+Efvgmz05tOGPwbYpsE+IaBt3hFCt2j0jNuKK87wXlk+5fmK1viZ0rk46K0tb2m9V5UR68uWKgd3wsI77PGemBNrbeHdHalEGAFPViK/XZkbNRLi8kyxbYircIHosImWs2a603tl+wJ6L7kw0kcee3mcoS57KWMJI0/hZP/5GWzrmax4Kc37wwrTOE/A+c9i1uqyplOdFkphLDNEFcWdNoB1kEdycDk7EeQ/Dq8Cm7GQJkcz3WxkJv6GPrMJG4TIO1d1YdkadFKW6DrKT3mFFEnxS8f9iFp+0M+Y40+IBymgBhNiQ+KezEqVJBQI/ak3x4jB1pH6g4DvdB63IzRDZuqPzCu2+XQSwpWkC4nxFlUs+IZZ6sF/ybsDbk1oHSYdLN6eyKBhDEOx616Fqa1KTCey31h9Hx3y8VY79Ee0dbPssAbz4PZh99GxJ+C5KCYPaQP99+Sbc/8k8QeD9SvFoP1BcfCFBXLzSp1tKhMnbmeatJ3FJBwBmevHxeEiQvMSIDGP+6xjT0lHmGaYyEMZgHOD4xwPi/EixnflgVA+2ArqFHqJT1uGW+debMmlBphtHMqiGBsoa2Hm8QcXPUdm2Ra8r4=
+after_deploy:
+- echo "${PROJECT_NAME}" | grep -q "releases"; if [[ $? -eq 0 ]]; then run_coverage="false";
+  else run_coverage=; fi;
+- if [[ "${TRAVIS_R_VERSION_STRING}" = "release" ]]; then echo 'covr::coveralls(type
+  = "all", quiet = FALSE)' > neuroc_covr.R ; travis_wait 100 Rscript neuroc_covr.R
+  ; rm neuroc_covr.R ; fi
 
+#neuroc.deps version (SHA): 68c8a14
